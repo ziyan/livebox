@@ -3,7 +3,7 @@ set -e
 
 STREAM=${1:-livestream}
 TIMESTAMP=$(date -u "+%s")
-HLS="hls_time=5:start_number=0:hls_list_size=24:hls_flags=omit_endlist:hls_segment_filename=${TIMESTAMP}-"
+HLS="hls_time=4:hls_list_size=12:hls_allow_cache=0:hls_flags=80:hls_segment_filename=${TIMESTAMP}-"
 
 # setup directory
 mkdir -p /data/root/${STREAM} /data/archive
@@ -27,7 +27,7 @@ exec /bin/ffmpeg \
     -i "rtmp://127.0.0.1/live/${STREAM}" \
     -c copy -f flv /data/archive/${STREAM}.${TIMESTAMP}.flv \
     -c:v libx264 -vprofile baseline -vlevel 3.1 -c:a aac -ar 44100 -ac 2 -b:a 96k \
-    -force_key_frames "expr:gte(t,n_forced*5)" \
+    -force_key_frames "expr:gte(t,n_forced*4)" \
     -filter_complex "
         [0:v]split=4[s0][s1][s2][s3];
         [s0]fps=25,scale=1280x720[v0];
