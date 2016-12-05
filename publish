@@ -1,0 +1,44 @@
+#!/bin/sh
+set -e
+
+STREAM=${1:-livestream}
+TIMESTAMP=$(date -u "+%s")
+HLS="hls_time=5:start_number=${TIMESTAMP}:hls_list_size=24:hls_flags=omit_endlist:hls_segment_filename="
+
+# setup directory
+mkdir -p /data/root/${STREAM} /data/archive
+
+# setup the master m3u8 file
+cat > /data/root/.${STREAM}.m3u8 << EOF
+#EXTM3U
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=4252000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2",NAME="720p"
+${STREAM}/720p.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2377000,RESOLUTION=960x540,CODECS="avc1.4d401f,mp4a.40.2",NAME="540p"
+${STREAM}/540p.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1063000,RESOLUTION=640x360,CODECS="avc1.4d401f,mp4a.40.2",NAME="360p"
+${STREAM}/360p.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=420000,RESOLUTION=384x216,CODECS="avc1.4d401f,mp4a.40.2",NAME="216p"
+${STREAM}/216p.m3u8
+EOF
+mv /data/root/.${STREAM}.m3u8 /data/root/${STREAM}.m3u8
+
+cd /data/root/${STREAM}
+exec /bin/ffmpeg \
+    -i "rtmp://127.0.0.1/live/${STREAM}" \
+    -c copy -f flv /data/archive/${STREAM}.${TIMESTAMP}.flv \
+    -c:v libx264 -vprofile baseline -vlevel 3.1 -c:a aac -ar 44100 -ac 2 -b:a 96k \
+    -force_key_frames "expr:gte(t,n_forced*5)" \
+    -filter_complex "
+        [0:v]split=4[s0][s1][s2][s3];
+        [s0]fps=25,scale=1280x720[v0];
+        [s1]fps=25,scale=960x540[v1];
+        [s2]fps=25,scale=640x360[v2];
+        [s3]fps=25,scale=384x216[v3]
+    " \
+    -map "[v0]" -map "[v1]" -map "[v2]" -map "[v3]" -map "0:a" -f tee "
+        [select=\'v\:0,a\':${HLS}720p-%d.ts]720p.m3u8|
+        [select=\'v\:1,a\':${HLS}540p-%d.ts]540p.m3u8|
+        [select=\'v\:2,a\':${HLS}360p-%d.ts]360p.m3u8|
+        [select=\'v\:3,a\':${HLS}216p-%d.ts]216p.m3u8
+    "
+
