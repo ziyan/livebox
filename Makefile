@@ -35,11 +35,14 @@ build/etc/nginx.conf: nginx.conf
 build/bin/publish: publish
 	mkdir -p build/bin && cp publish build/bin/publish
 
+build/bin/live: live
+	mkdir -p build/bin && cp live build/bin/live
+
 build/Dockerfile: Dockerfile
 	mkdir -p build && cp Dockerfile build/Dockerfile
 
 .PHONY: docker
-docker: build/sbin/nginx build/bin/ffmpeg build/etc/nginx.conf build/bin/publish build/Dockerfile
+docker: build/sbin/nginx build/bin/ffmpeg build/etc/nginx.conf build/bin/publish build/bin/live build/Dockerfile
 	docker build -t ziyan/hlsbox build
 
 .PHONY: clean
