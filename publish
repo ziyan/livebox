@@ -1,17 +1,27 @@
 #!/bin/sh
 set -e
 
-STREAM=${1:-livestream}
-SESSION=$(date -u "+%s")
-HLS="hls_time=4:hls_list_size=5:use_localtime=1:hls_segment_filename=${SESSION}."
+# location of the root
+ROOT="/data/root"
 
-echo "[$(date)] publish stream ${STREAM} session ${SESSION} started"
+# location of the archive dir
+ARCHIVE="/data/archive"
 
-# setup directory
-mkdir -p /data/root/${STREAM} /data/archive
+# location of tmp
+TMP="/data/tmp"
 
-# setup the master m3u8 file
-cat > /data/root/.${STREAM}.m3u8 << EOF
+# session id
+SESSION="$(date -u +%s)"
+
+# input arguments
+APP="${1:-live}"
+STREAM="${2:-livestream}"
+
+echo "[$(date)] publish ${APP} stream ${STREAM} session ${SESSION} started"
+
+# setup the master m3u8 file for live
+mkdir -p "${ROOT}" "${TMP}"
+cat > "${TMP}/${APP}.${STREAM}.m3u8" << EOF
 #EXTM3U
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=4252000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2",NAME="720p"
 ${STREAM}/720p.m3u8
@@ -22,12 +32,19 @@ ${STREAM}/360p.m3u8
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=420000,RESOLUTION=384x216,CODECS="avc1.4d401f,mp4a.40.2",NAME="216p"
 ${STREAM}/216p.m3u8
 EOF
-mv /data/root/.${STREAM}.m3u8 /data/root/${STREAM}.m3u8
+mv -f "${TMP}/${APP}.${STREAM}.m3u8" "${ROOT}/${STREAM}.m3u8"
 
-cd /data/root/${STREAM}
+# setup directory
+mkdir -p "${ROOT}/${STREAM}/${APP}" "${ARCHIVE}"
+cd "${ROOT}/${STREAM}/${APP}"
+
+# parameters
+HLS="hls_time=4:hls_list_size=30:use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}."
+
+# go
 exec /bin/ffmpeg \
-    -i "rtmp://127.0.0.1/live/${STREAM}" \
-    -c copy -f flv /data/archive/${STREAM}.${SESSION}.flv \
+    -i "rtmp://127.0.0.1/${APP}/${STREAM}" \
+    -c copy -f flv "${ARCHIVE}/${APP}.${STREAM}.${SESSION}.flv" \
     -c:v libx264 -vprofile baseline -vlevel 3.1 -c:a aac -ar 44100 -ac 2 -b:a 96k \
     -force_key_frames "expr:gte(t,n_forced*4)" \
     -filter_complex "
@@ -38,9 +55,9 @@ exec /bin/ffmpeg \
         [s3]fps=25,scale=384x216[v3]
     " \
     -map "[v0]" -map "[v1]" -map "[v2]" -map "[v3]" -map "0:a" -f tee "
-        [select=\'v\:0,a\':${HLS}720p.%s.ts].720p.m3u8|
-        [select=\'v\:1,a\':${HLS}540p.%s.ts].540p.m3u8|
-        [select=\'v\:2,a\':${HLS}360p.%s.ts].360p.m3u8|
-        [select=\'v\:3,a\':${HLS}216p.%s.ts].216p.m3u8
+        [select=\'v\:0,a\':${HLS}720p.%s.ts]720p.m3u8|
+        [select=\'v\:1,a\':${HLS}540p.%s.ts]540p.m3u8|
+        [select=\'v\:2,a\':${HLS}360p.%s.ts]360p.m3u8|
+        [select=\'v\:3,a\':${HLS}216p.%s.ts]216p.m3u8
     "
 
