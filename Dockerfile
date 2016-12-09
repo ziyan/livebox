@@ -10,4 +10,4 @@ WORKDIR /data
 
 USER www-data
 
-CMD ["/sbin/nginx"]
+ENTRYPOINT ["/bin/entrypoint"]

@@ -2,20 +2,8 @@
 set -e
 # this daemon will manage all m3u8 files
 
-# location of the root
-ROOT="/data/root"
-
-# location of tmp
-TMP="/data/tmp"
-
-# order of apps to use
-APPS="ad live backup"
-
-# names of the substreams
-SUBSTREAMS="720p 540p 360p 216p"
-
-# number of entries to keep in m3u8
-SIZE="10"
+# source env
+. /tmp/livebox.env
 
 echo "[$(date)] deamon started"
 
@@ -39,7 +27,7 @@ generate_m3u8() {
 
     # figure out duration
     local TARGETDURATION="0"
-    tail -n ${SIZE} "${CSV}" | while read LINE; do
+    tail -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
         local DURATION="$(echo ${LINE} | cut -d, -f3)"
         local ROUNDED="$(echo ${DURATION} | cut -d. -f1)"
         if [ "$(echo ${DURATION} | cut -d. -f2)" -gt "0" ]; then
@@ -52,15 +40,15 @@ generate_m3u8() {
     done | tail -n 1 >> "${SCRATCH}"
 
     # figure out the sequence number
-    local SEQUENCE="$(expr ${TOTAL} - ${SIZE})"
+    local SEQUENCE="$(expr ${TOTAL} - ${HLS_LIST_SIZE})"
     if [ "${SEQUENCE}" -lt "0" ]; then
         SEQUENCE="0"
     fi
     echo "#EXT-X-MEDIA-SEQUENCE:${SEQUENCE}" >> "${SCRATCH}"
 
     # write each segment
-    local LASTSESSION="$(tail -n `expr 1 + ${SIZE}` "${CSV}" | head -n 1 | cut -d, -f2)"
-    tail -n ${SIZE} "${CSV}" | while read LINE; do
+    local LASTSESSION="$(tail -n `expr 1 + ${HLS_LIST_SIZE}` "${CSV}" | head -n 1 | cut -d, -f2)"
+    tail -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
         local SESSION="$(echo ${LINE} | cut -d, -f2)"
         local DURATION="$(echo ${LINE} | cut -d, -f3)"
         local TS="$(echo ${LINE} | cut -d, -f4)"
@@ -120,7 +108,6 @@ list_substreams() {
     local STREAM="$1"
 
     echo ${SUBSTREAMS}
-    # find "${ROOT}/${STREAM}" -mindepth 1 -maxdepth 1 -type f -iname '.*p.m3u8' -print 2>/dev/null | cut -d. -f2
 }
 
 try_stream() {

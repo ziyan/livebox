@@ -1,14 +1,8 @@
 #!/bin/sh
 set -e
 
-# location of the root
-ROOT="/data/root"
-
-# location of the archive dir
-ARCHIVE="/data/archive"
-
-# location of tmp
-TMP="/data/tmp"
+# source env
+. /tmp/livebox.env
 
 # session id
 SESSION="$(date -u +%s)"
@@ -21,17 +15,14 @@ echo "[$(date)] publish ${APP} stream ${STREAM} session ${SESSION} started"
 
 # setup the master m3u8 file for live
 mkdir -p "${ROOT}" "${TMP}"
-cat > "${TMP}/${APP}.${STREAM}.m3u8" << EOF
-#EXTM3U
-#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=4252000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2",NAME="720p"
-${STREAM}/720p.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2377000,RESOLUTION=960x540,CODECS="avc1.4d401f,mp4a.40.2",NAME="540p"
-${STREAM}/540p.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1063000,RESOLUTION=640x360,CODECS="avc1.4d401f,mp4a.40.2",NAME="360p"
-${STREAM}/360p.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=420000,RESOLUTION=384x216,CODECS="avc1.4d401f,mp4a.40.2",NAME="216p"
-${STREAM}/216p.m3u8
-EOF
+echo "#EXTM3U" > "${TMP}/${APP}.${STREAM}.m3u8"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    BITRATE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_BITRATE:-4252000})"
+    CODECS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_CODECS:-avc1.4d401f,mp4a.40.2})"
+    VIDEO_SCALE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE:-1280x720})"
+    echo "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=${BITRATE},RESOLUTION=${VIDEO_SCALE},CODECS=\"${CODECS}\",NAME=\"${SUBSTREAM}\"" >> "${TMP}/${APP}.${STREAM}.m3u8"
+    echo "${STREAM}/${SUBSTREAM}.m3u8" >> "${TMP}/${APP}.${STREAM}.m3u8"
+done
 mv -f "${TMP}/${APP}.${STREAM}.m3u8" "${ROOT}/${STREAM}.m3u8"
 
 # setup directory
@@ -39,25 +30,42 @@ mkdir -p "${ROOT}/${STREAM}/${APP}" "${ARCHIVE}"
 cd "${ROOT}/${STREAM}/${APP}"
 
 # parameters
-HLS="hls_time=4:hls_list_size=30:use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}."
+HLS="hls_time=${HLS_TIME}:hls_list_size=${HLS_LIST_SIZE}:use_localtime=1:hls_flags=66:hls_segment_filename="
+
+SPLIT="0"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    SPLIT="$(expr 1 + ${SPLIT})"
+done
+
+FILTER="[0:v]split=${SPLIT}"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    FILTER="${FILTER}[${SUBSTREAM}-in]"
+done
+for SUBSTREAM in ${SUBSTREAMS}; do
+    VIDEO_SCALE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE:-1280x720})"
+    VIDEO_FPS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_FPS:-25})"
+    FILTER="${FILTER};[${SUBSTREAM}-in]fps=${VIDEO_FPS},scale=${VIDEO_SCALE}[${SUBSTREAM}-out]"
+done
+
+MAPS="-map 0:a"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    MAPS="${MAPS} -map [${SUBSTREAM}-out]"
+done
+
+TEE=""
+V="0"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    TEE="${TEE}|[select=\'v\:${V},a\':${HLS}${SESSION}.${SUBSTREAM}.%s.ts]${SUBSTREAM}.m3u8"
+    V="$(expr 1 + ${V})"
+done
+TEE="${TEE#|}"
 
 # go
 exec /bin/ffmpeg \
     -i "rtmp://127.0.0.1/${APP}/${STREAM}" \
     -c copy -f flv "${ARCHIVE}/${APP}.${STREAM}.${SESSION}.flv" \
-    -c:v libx264 -vprofile baseline -vlevel 3.1 -c:a aac -ar 44100 -ac 2 -b:a 96k \
-    -force_key_frames "expr:gte(t,n_forced*4)" \
-    -filter_complex "
-        [0:v]split=4[s0][s1][s2][s3];
-        [s0]fps=25,scale=1280x720[v0];
-        [s1]fps=25,scale=960x540[v1];
-        [s2]fps=25,scale=640x360[v2];
-        [s3]fps=25,scale=384x216[v3]
-    " \
-    -map "[v0]" -map "[v1]" -map "[v2]" -map "[v3]" -map "0:a" -f tee "
-        [select=\'v\:0,a\':${HLS}720p.%s.ts]720p.m3u8|
-        [select=\'v\:1,a\':${HLS}540p.%s.ts]540p.m3u8|
-        [select=\'v\:2,a\':${HLS}360p.%s.ts]360p.m3u8|
-        [select=\'v\:3,a\':${HLS}216p.%s.ts]216p.m3u8
-    "
+    -c:v libx264 -vprofile ${VIDEO_PROFILE} -vlevel ${VIDEO_LEVEL} -c:a aac -ar ${AUDIO_SAMPLING_RATE} -ac ${AUDIO_CHANNELS} -b:a ${AUDIO_BITRATE} \
+    -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})" \
+    -filter_complex "${FILTER}" \
+    ${MAPS} -f tee "${TEE}"
 

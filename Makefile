@@ -38,13 +38,17 @@ build/bin/publish: publish
 build/bin/daemon: daemon
 	mkdir -p build/bin && cp daemon build/bin/daemon
 
+build/bin/entrypoint: entrypoint
+	mkdir -p build/bin && cp entrypoint build/bin/entrypoint
+
 build/Dockerfile: Dockerfile
 	mkdir -p build && cp Dockerfile build/Dockerfile
 
 .PHONY: docker
-docker: build/sbin/nginx build/bin/ffmpeg build/etc/nginx.conf build/bin/publish build/bin/daemon build/Dockerfile
+docker: build/sbin/nginx build/bin/ffmpeg build/etc/nginx.conf build/bin/publish build/bin/daemon build/bin/entrypoint build/Dockerfile
 	docker build -t ziyan/livebox build
 
 .PHONY: clean
 clean:
 	rm -rf build
+

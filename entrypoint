@@ -1,0 +1,70 @@
+#!/bin/sh
+set -e
+
+echo > /tmp/livebox.env
+
+# location of the root
+ROOT="${ROOT:-/data/root}"
+echo "ROOT=\"${ROOT}\"" >> /tmp/livebox.env
+
+# location of the archive dir
+ARCHIVE="${ARCHIVE:-/data/archive}"
+echo "ARCHIVE=\"${ARCHIVE}\"" >> /tmp/livebox.env
+
+# location of tmp
+TMP="${TMP:-/data/tmp}"
+echo "TMP=\"${TMP}\"" >> /tmp/livebox.env
+
+# list of apps to publish
+APPS="${APPS:-ad live backup}"
+echo "APPS=\"${APPS}\"" >> /tmp/livebox.env
+
+# list of bitrates to transcode
+SUBSTREAMS="${SUBSTREAMS:-720p}"
+echo "SUBSTREAMS=\"${SUBSTREAMS}\"" >> /tmp/livebox.env
+
+echo "Configured substreams:"
+for SUBSTREAM in ${SUBSTREAMS}; do
+    BITRATE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_BITRATE:-4252000})"
+    CODECS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_CODECS:-avc1.4d401f,mp4a.40.2})"
+    VIDEO_SCALE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE:-1280x720})"
+    VIDEO_FPS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_FPS:-25})"
+    echo "SUBSTREAM_${SUBSTREAM}_BITRATE=\"${BITRATE}\"" >> /tmp/livebox.env
+    echo "SUBSTREAM_${SUBSTREAM}_CODECS=\"${CODECS}\"" >> /tmp/livebox.env
+    echo "SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE=\"${VIDEO_SCALE}\"" >> /tmp/livebox.env
+    echo "SUBSTREAM_${SUBSTREAM}_VIDEO_FPS=\"${VIDEO_FPS}\"" >> /tmp/livebox.env
+    echo "- ${SUBSTREAM}: ${VIDEO_SCALE} @ ${VIDEO_FPS} fps, ${BITRATE} bps, codecs \"${CODECS}\""
+done
+echo
+
+# number of entries to keep in generated m3u8
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
+echo "HLS_LIST_SIZE=\"${HLS_LIST_SIZE}\"" >> /tmp/livebox.env
+
+# hls segment length in seconds, also number of seconds between key frames
+HLS_TIME="${HLS_TIME:-4}"
+echo "HLS_TIME=\"${HLS_TIME}\"" >> /tmp/livebox.env
+
+VIDEO_PROFILE="${VIDEO_PROFILE:-baseline}"
+echo "VIDEO_PROFILE=\"${VIDEO_PROFILE}\"" >> /tmp/livebox.env
+
+VIDEO_LEVEL="${VIDEO_LEVEL:-3.1}"
+echo "VIDEO_LEVEL=\"${VIDEO_LEVEL}\"" >> /tmp/livebox.env
+
+AUDIO_SAMPLING_RATE="${AUDIO_SAMPLING_RATE:-44100}"
+echo "AUDIO_SAMPLING_RATE=\"${AUDIO_SAMPLING_RATE}\"" >> /tmp/livebox.env
+
+AUDIO_CHANNELS="${AUDIO_CHANNELS:-2}"
+echo "AUDIO_CHANNELS=\"${AUDIO_CHANNELS}\"" >> /tmp/livebox.env
+
+AUDIO_BITRATE="${AUDIO_BITRATE:-96k}"
+echo "AUDIO_BITRATE=\"${AUDIO_BITRATE}\"" >> /tmp/livebox.env
+
+echo "All variables:"
+cat /tmp/livebox.env
+echo
+
+# start execution
+echo "Start nginx."
+exec /sbin/nginx
+
