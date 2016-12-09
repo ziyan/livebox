@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo > /tmp/livebox.env
+rm -f /tmp/livebox.env
 
 # location of the root
 ROOT="${ROOT:-/data/root}"
@@ -19,6 +19,10 @@ echo "TMP=\"${TMP}\"" >> /tmp/livebox.env
 APPS="${APPS:-ad live backup}"
 echo "APPS=\"${APPS}\"" >> /tmp/livebox.env
 
+# where to forward the stream to
+FORWARDS="${FORWARDS}"
+echo "FORWARDS=\"${FORWARDS}\"" >> /tmp/livebox.env
+
 # list of bitrates to transcode
 SUBSTREAMS="${SUBSTREAMS:-720p}"
 echo "SUBSTREAMS=\"${SUBSTREAMS}\"" >> /tmp/livebox.env
@@ -27,13 +31,13 @@ echo "Configured substreams:"
 for SUBSTREAM in ${SUBSTREAMS}; do
     BITRATE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_BITRATE:-4252000})"
     CODECS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_CODECS:-avc1.4d401f,mp4a.40.2})"
-    VIDEO_SCALE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE:-1280x720})"
+    VIDEO_SIZE="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_SIZE:-1280x720})"
     VIDEO_FPS="$(eval echo \${SUBSTREAM_${SUBSTREAM}_VIDEO_FPS:-25})"
     echo "SUBSTREAM_${SUBSTREAM}_BITRATE=\"${BITRATE}\"" >> /tmp/livebox.env
     echo "SUBSTREAM_${SUBSTREAM}_CODECS=\"${CODECS}\"" >> /tmp/livebox.env
-    echo "SUBSTREAM_${SUBSTREAM}_VIDEO_SCALE=\"${VIDEO_SCALE}\"" >> /tmp/livebox.env
+    echo "SUBSTREAM_${SUBSTREAM}_VIDEO_SIZE=\"${VIDEO_SIZE}\"" >> /tmp/livebox.env
     echo "SUBSTREAM_${SUBSTREAM}_VIDEO_FPS=\"${VIDEO_FPS}\"" >> /tmp/livebox.env
-    echo "- ${SUBSTREAM}: ${VIDEO_SCALE} @ ${VIDEO_FPS} fps, ${BITRATE} bps, codecs \"${CODECS}\""
+    echo "- ${SUBSTREAM}: ${VIDEO_SIZE} @ ${VIDEO_FPS} fps, ${BITRATE} bps, codecs \"${CODECS}\""
 done
 echo
 

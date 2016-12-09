@@ -6,6 +6,7 @@ set -e
 . /tmp/livebox.env
 
 echo "[$(date)] deamon started"
+cat /tmp/livebox.env
 
 generate_m3u8() {
     local CSV="$1" SCRATCH="$2" OUTPUT="$3"
