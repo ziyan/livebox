@@ -8,6 +8,15 @@ set -e
 echo "[$(date)] deamon started"
 cat /tmp/livebox.env
 
+rounded() {
+    local DURATION="$1"
+    local ROUNDED="$(echo ${DURATION} | cut -d. -f1)"
+    if [ "$(echo ${DURATION} | cut -d. -f2)" -gt "0" ]; then
+        ROUNDED="$(expr 1 + ${ROUNDED})"
+    fi
+    echo "${ROUNDED}"
+}
+
 generate_m3u8() {
     local CSV="$1" SCRATCH="$2" OUTPUT="$3"
 
@@ -28,17 +37,13 @@ generate_m3u8() {
 
     # figure out duration
     local TARGETDURATION="0"
-    tail -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
-        local DURATION="$(echo ${LINE} | cut -d, -f3)"
-        local ROUNDED="$(echo ${DURATION} | cut -d. -f1)"
-        if [ "$(echo ${DURATION} | cut -d. -f2)" -gt "0" ]; then
-            ROUNDED="$(expr 1 + ${ROUNDED})"
-        fi
-        if [ "${ROUNDED}" -gt "${TARGETDURATION}" ]; then
-            TARGETDURATION="${ROUNDED}"
+    tail -q -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
+        local DURATION="$(rounded $(echo ${LINE} | cut -d, -f3))"
+        if [ "${DURATION}" -gt "${TARGETDURATION}" ]; then
+            TARGETDURATION="${DURATION}"
             echo "#EXT-X-TARGETDURATION:${TARGETDURATION}"
         fi
-    done | tail -n 1 >> "${SCRATCH}"
+    done | tail -q -n 1 >> "${SCRATCH}"
 
     # figure out the sequence number
     local SEQUENCE="$(expr ${TOTAL} - ${HLS_LIST_SIZE})"
@@ -48,8 +53,8 @@ generate_m3u8() {
     echo "#EXT-X-MEDIA-SEQUENCE:${SEQUENCE}" >> "${SCRATCH}"
 
     # write each segment
-    local LASTSESSION="$(tail -n `expr 1 + ${HLS_LIST_SIZE}` "${CSV}" | head -n 1 | cut -d, -f2)"
-    tail -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
+    local LASTSESSION="$(tail -q -n `expr 1 + ${HLS_LIST_SIZE}` "${CSV}" | head -n 1 | cut -d, -f2)"
+    tail -q -n ${HLS_LIST_SIZE} "${CSV}" | while read LINE; do
         local SESSION="$(echo ${LINE} | cut -d, -f2)"
         local DURATION="$(echo ${LINE} | cut -d, -f3)"
         local TS="$(echo ${LINE} | cut -d, -f4)"
@@ -70,36 +75,62 @@ generate_m3u8() {
 }
 
 update_csv() {
-    local SOURCE="$1" CSV="$2" PREFIX="$3"
+    local SOURCE="$1" CSV="$2" PREFIX="$3" AFTER="$4"
 
     # create csv if needed
     [ -f "${CSV}" ] || touch "${CSV}"
 
-    # find the latest timestamp
-    local LASTTIMESTAMP="$(tail -n 1 ${CSV} | cut -d, -f1)"
-    if [ -z "${LASTTIMESTAMP}" ]; then
-        LASTTIMESTAMP="0"
+    # find the latest timestamp unless it is media
+    if [ "${PREFIX#media/}" == "${PREFIX}" ]; then
+        local LASTTIMESTAMP="$(tail -q -n 1 ${CSV} | cut -d, -f1)"
+        if [ -z "${LASTTIMESTAMP}" ]; then
+            LASTTIMESTAMP="0"
+        fi
+    fi
+
+    # make sure after is not at the very end
+    if [ ! -z "${AFTER}" ]; then
+        NEXT="$(grep -A 1 ^${AFTER}\$ ${SOURCE} | tail -q -n 1)"
+        if [ -z "${NEXT}" ] || [ "${NEXT}" == "#EXT-X-ENDLIST" ]; then
+            AFTER=""
+        fi
     fi
 
     # compare source and list and fill missing segments
     local DURATION="0"
     cat "${SOURCE}" | while read LINE; do
         if [ "${LINE#\#EXTINF:}" != "${LINE}" ]; then
+            # parse duration
             DURATION="${LINE}"
             DURATION="${DURATION#\#EXTINF:}"
             DURATION="${DURATION%,}"
             continue
         fi
         if [ "${LINE%.ts}" != "${LINE}" ]; then
-            # for segments, check if timestamp is greater then last
             local TS="${LINE}"
+            if [ ! -z "${AFTER}" ]; then
+                if [ "${TS}" = "${AFTER}" ]; then
+                    # found the matching segment, will deal with the next one
+                    AFTER=""
+                fi
+                continue
+            fi
+
+            # if playing media, we just need one segment
+            if [ "${PREFIX#media/}" != "${PREFIX}" ]; then
+                local SESSION="$(echo ${TS} | cut -d. -f1)"
+                echo "$(date -u +%s),${PREFIX}/${SESSION},${DURATION},${PREFIX}/${TS}" >> "${CSV}"
+                break
+            fi
+            
+            # for segments, check if timestamp is greater then last
             local TIMESTAMP="$(echo ${TS} | cut -d. -f3)"
             if [ "${TIMESTAMP}" -gt "${LASTTIMESTAMP}" ]; then
                 LASTTIMESTAMP="${TIMESTAMP}"
 
                 # append new segment to the list
                 local SESSION="$(echo ${TS} | cut -d. -f1)"
-                echo "${TIMESTAMP},${PREFIX}${SESSION},${DURATION},${PREFIX}${TS}" >> "${CSV}"
+                echo "${TIMESTAMP},${PREFIX}/${SESSION},${DURATION},${PREFIX}/${TS}" >> "${CSV}"
             fi
         fi
     done
@@ -115,14 +146,26 @@ try_stream() {
     local APP="$1"
     local STREAM="$2"
     local DIR="${ROOT}/${STREAM}/${APP}"
-    local PREFIX="${APP}/"
+    local PREFIX="${APP}"
+    local DEADLINE="$(expr $(date -u +%s) - $(expr 3 \* ${HLS_TIME}))"
 
-    # check if any of the stream has stopped
     for SUBSTREAM in `list_substreams "${STREAM}"`; do
+        # detect if stream has not yet started
         if [ ! -s "${DIR}/${SUBSTREAM}.m3u8" ]; then
             return 1
         fi
+
+        # detect end of stream
         if [ "$(tail -q -n 1 ${DIR}/${SUBSTREAM}.m3u8)" = "#EXT-X-ENDLIST" ]; then
+            return 1
+        fi
+
+        # detect stalling
+        LASTTIMESTAMP="$(tail -q -n 1 ${DIR}/${SUBSTREAM}.m3u8 | cut -d. -f3)"
+        if [ -z "${LASTTIMESTAMP}" ]; then
+            LASTTIMESTAMP="0"
+        fi
+        if [ "${LASTTIMESTAMP}" -lt "${DEADLINE}" ]; then
             return 1
         fi
     done
@@ -134,13 +177,109 @@ try_stream() {
     return 0
 }
 
+try_media() {
+    local STREAM="$1"
+    local DIR="${ROOT}/${STREAM}/media"
+
+    # the directory needs to be there
+    if [ ! -d "${DIR}" ]; then
+        return 1
+    fi
+
+    # first need to know the previous playing media is still available for all substreams
+    LASTMEDIA=""
+    NEXTMEDIA=""
+    for SUBSTREAM in `list_substreams "${STREAM}"`; do
+        LINE="$(grep ',media/' ${ROOT}/${STREAM}/${SUBSTREAM}.csv | tail -q -n 1)"
+        if [ -z "${LINE}" ]; then
+            # no media playing
+            NEXTMEDIA=""
+            break
+        fi
+
+        TIMESTAMP="$(echo ${LINE} | cut -d, -f1)"
+        DURATION="$(rounded $(echo ${LINE} | cut -d, -f3))"
+        if [ "$(expr ${TIMESTAMP} + ${DURATION})" -gt "$(date -u +%s)" ]; then
+            # wait until it is time to write the next segment
+            return 0
+        fi
+
+        MEDIA="$(echo ${LINE} | cut -d, -f2 | cut -d/ -f2)"
+        if [ ! -z "${LASTMEDIA}" ] && [ "${LASTMEDIA}" != "${MEDIA}" ]; then
+            # disagreement amount different substream about what media is playing
+            NEXTMEDIA=""
+            break
+        fi
+        LASTMEDIA="${MEDIA}"
+
+        if [ ! -s "${DIR}/${MEDIA}/${SUBSTREAM}.m3u8" ]; then
+            # can no longer find the media, need new media
+            NEXTMEDIA=""
+            break
+        fi
+
+        TS="$(echo ${LINE} | cut -d, -f4 | cut -d/ -f3)"
+        NEXT="$(grep -A 1 ^${TS}\$ ${DIR}/${MEDIA}/${SUBSTREAM}.m3u8 | tail -q -n 1)"
+        if [ -z "${NEXT}" ] || [ "${NEXT}" == "#EXT-X-ENDLIST" ]; then
+            # next segment is not available
+            NEXTMEDIA=""
+            break
+        fi
+
+        NEXTMEDIA="${MEDIA}"
+    done
+
+    # figure out what is next
+    if [ -z "${NEXTMEDIA}" ]; then
+        for MEDIA in $(ls -1 ${DIR}) $(ls -1 ${DIR}); do
+            # skip over last media first
+            if [ ! -z "${LASTMEDIA}" ]; then
+                if [ "${MEDIA}" = "${LASTMEDIA}" ]; then
+                    LASTMEDIA=""
+                fi
+                continue
+            fi
+            # TODO: check media suitable
+            NEXTMEDIA="${MEDIA}"
+            break
+        done
+    fi
+
+    # nothing to play
+    if [ -z "${NEXTMEDIA}" ]; then
+        return 1
+    fi
+
+    local PREFIX="media/${NEXTMEDIA}"
+
+    # now update the csv
+    for SUBSTREAM in `list_substreams "${STREAM}"`; do
+        LINE="$(grep ',media/' ${ROOT}/${STREAM}/${SUBSTREAM}.csv | tail -q -n 1)"
+        MEDIA="$(echo ${LINE} | cut -d, -f2 | cut -d/ -f2)"
+        AFTER=""
+        if [ "${MEDIA}" = "${NEXTMEDIA}" ]; then
+            # continue previous playback
+            AFTER="$(echo ${LINE} | cut -d, -f4 | cut -d/ -f3)"
+        fi
+        update_csv "${DIR}/${NEXTMEDIA}/${SUBSTREAM}.m3u8" "${ROOT}/${STREAM}/${SUBSTREAM}.csv" "${PREFIX}" "${AFTER}"
+    done
+
+    return 0
+}
+
 do_stream() {
     local STREAM="$1"
 
     # write the csv files first
-    for APP in ${APPS}; do
-        if try_stream "${APP}" "${STREAM}"; then
-            break
+    for APP in ad live backup media; do
+        if [ "${APP}" != "media" ]; then
+            if try_stream "${APP}" "${STREAM}"; then
+                break
+            fi
+        else
+            if try_media "${STREAM}"; then
+                break
+            fi
         fi
     done
 

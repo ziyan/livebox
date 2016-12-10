@@ -15,10 +15,6 @@ echo "ARCHIVE=\"${ARCHIVE}\"" >> /tmp/livebox.env
 TMP="${TMP:-/data/tmp}"
 echo "TMP=\"${TMP}\"" >> /tmp/livebox.env
 
-# list of apps to publish
-APPS="${APPS:-ad live backup}"
-echo "APPS=\"${APPS}\"" >> /tmp/livebox.env
-
 # where to forward the stream to
 FORWARDS="${FORWARDS}"
 echo "FORWARDS=\"${FORWARDS}\"" >> /tmp/livebox.env
