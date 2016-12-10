@@ -46,7 +46,7 @@ build/Dockerfile: Dockerfile
 
 .PHONY: docker
 docker: build/sbin/nginx build/bin/ffmpeg build/etc/nginx.conf build/bin/publish build/bin/daemon build/bin/entrypoint build/Dockerfile
-	docker build -t ziyan/livebox build
+	docker build -t ziyan/livebox:latest build
 
 .PHONY: clean
 clean:
