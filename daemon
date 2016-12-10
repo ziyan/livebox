@@ -190,7 +190,13 @@ try_media() {
     LASTMEDIA=""
     NEXTMEDIA=""
     for SUBSTREAM in `list_substreams "${STREAM}"`; do
-        LINE="$(grep ',media/' ${ROOT}/${STREAM}/${SUBSTREAM}.csv | tail -q -n 1)"
+        CSV="${ROOT}/${STREAM}/${SUBSTREAM}.csv"
+
+        # create csv if needed
+        [ -f "${CSV}" ] || touch "${CSV}"
+
+        # find last media playback
+        LINE="$(grep ',media/' ${CSV} | tail -q -n 1)"
         if [ -z "${LINE}" ]; then
             # no media playing
             NEXTMEDIA=""
@@ -254,14 +260,15 @@ try_media() {
 
     # now update the csv
     for SUBSTREAM in `list_substreams "${STREAM}"`; do
-        LINE="$(grep ',media/' ${ROOT}/${STREAM}/${SUBSTREAM}.csv | tail -q -n 1)"
+        CSV="${ROOT}/${STREAM}/${SUBSTREAM}.csv"
+        LINE="$(grep ',media/' ${CSV} | tail -q -n 1)"
         MEDIA="$(echo ${LINE} | cut -d, -f2 | cut -d/ -f2)"
         AFTER=""
         if [ "${MEDIA}" = "${NEXTMEDIA}" ]; then
             # continue previous playback
             AFTER="$(echo ${LINE} | cut -d, -f4 | cut -d/ -f3)"
         fi
-        update_csv "${DIR}/${NEXTMEDIA}/${SUBSTREAM}.m3u8" "${ROOT}/${STREAM}/${SUBSTREAM}.csv" "${PREFIX}" "${AFTER}"
+        update_csv "${DIR}/${NEXTMEDIA}/${SUBSTREAM}.m3u8" "${CSV}" "${PREFIX}" "${AFTER}"
     done
 
     return 0
