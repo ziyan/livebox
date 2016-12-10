@@ -65,6 +65,13 @@ done
 TEE="${TEE#|}"
 
 # go
+echo /bin/ffmpeg \
+    -i "rtmp://127.0.0.1/${APP}/${STREAM}" ${OUTPUTS} \
+    -c:v libx264 -vprofile ${VIDEO_PROFILE} -vlevel ${VIDEO_LEVEL} -c:a aac -ar ${AUDIO_SAMPLING_RATE} -ac ${AUDIO_CHANNELS} -b:a ${AUDIO_BITRATE} \
+    -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})" \
+    -filter_complex "${FILTER}" \
+    ${MAPS} -f tee "${TEE}"
+
 exec /bin/ffmpeg \
     -i "rtmp://127.0.0.1/${APP}/${STREAM}" ${OUTPUTS} \
     -c:v libx264 -vprofile ${VIDEO_PROFILE} -vlevel ${VIDEO_LEVEL} -c:a aac -ar ${AUDIO_SAMPLING_RATE} -ac ${AUDIO_CHANNELS} -b:a ${AUDIO_BITRATE} \
