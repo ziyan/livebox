@@ -59,7 +59,7 @@ done
 TEE=""
 V="0"
 for SUBSTREAM in ${SUBSTREAMS}; do
-    TEE="${TEE}|[select=\'v\:${V},a\':hls_time=${HLS_TIME}:hls_list_size=${HLS_LIST_SIZE}:use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}.${SUBSTREAM}.%s.ts]${SUBSTREAM}.m3u8"
+    TEE="${TEE}|[select=\'v\:${V},a\':hls_time=${HLS_TIME}:hls_list_size=$(expr 3 * ${HLS_LIST_SIZE}):use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}.${SUBSTREAM}.%s.ts]${SUBSTREAM}.m3u8"
     V="$(expr 1 + ${V})"
 done
 TEE="${TEE#|}"
