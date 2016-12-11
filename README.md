@@ -8,12 +8,6 @@ docker pull ziyan/livebox:latest
 ```
 
 ## Run
-Please first take a look at the [example](example/) for a standard setup using [docker-compose](https://docs.docker.com/compose/), to run the example:
-
-```
-docker-compose build
-docker-compose up -d
-```
 
 You need to prepare a location on your harddisk for all generated files. The location will be used as a volume in docker container. The location must be owned by ```www-data:www-data```.
 
@@ -22,16 +16,31 @@ mkdir data
 chown www-data:www-data data
 ```
 
-To run livebox standalone:
+Please first take a look at the [example](example/) for a standard setup using [docker-compose](https://docs.docker.com/compose/), to run the example:
 
 ```
-docker run -p 1935:1935 -v $(pwd)/data:/data ziyan/livebox:latest
+docker-compose build
+docker-compose up -d
 ```
 
 To publish to the livebox instance:
 
 ```
 ffmpeg -re -i input.flv -c copy -f flv rtmp://localhost/live/livestream
+```
+
+Then, your stream can be played at:
+
+```
+http://localhost/livestream.m3u8
+```
+
+### Advanced usage
+
+To run livebox standalone:
+
+```
+docker run -p 1935:1935 -v $(pwd)/data:/data ziyan/livebox:latest
 ```
 
 ## Configurations
