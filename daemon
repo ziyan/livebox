@@ -263,6 +263,10 @@ try_media() {
     for SUBSTREAM in `list_substreams "${STREAM}"`; do
         CSV="${ROOT}/${STREAM}/${SUBSTREAM}.csv"
         AFTER=""
+
+        # create csv if needed
+        [ -f "${CSV}" ] || touch "${CSV}"
+        
         LINE="$(tail -q -n 1 ${CSV})"
         if [ "$(echo ${LINE} | cut -d, -f2 | cut -d/ -f1)" != "media" ]; then
             LINE="$(grep ',media/' ${CSV} | tail -q -n 1)"
