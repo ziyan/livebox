@@ -257,8 +257,6 @@ try_media() {
         return 1
     fi
 
-    local PREFIX=""
-
     # now update the csv
     for SUBSTREAM in `list_substreams "${STREAM}"`; do
         CSV="${ROOT}/${STREAM}/${SUBSTREAM}.csv"
