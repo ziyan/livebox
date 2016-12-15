@@ -237,7 +237,7 @@ try_media() {
 
     # figure out what is next
     if [ -z "${NEXTMEDIA}" ]; then
-        for MEDIA in $(ls -1 ${DIR}) $(ls -1 ${DIR}); do
+        for MEDIA in $(ls -1 ${DIR}); do
             # skip over last media first
             if [ ! -z "${LASTMEDIA}" ]; then
                 if [ "${MEDIA}" = "${LASTMEDIA}" ]; then
@@ -245,6 +245,17 @@ try_media() {
                 fi
                 continue
             fi
+            # TODO: check media suitable
+            NEXTMEDIA="${MEDIA}"
+            NEXTSESSION="$(date -u +%s)"
+            break
+        done
+    fi
+
+    # if the last media was not found or the last media was the last one
+    # start from the first media
+    if [ -z "${NEXTMEDIA}" ]; then
+        for MEDIA in $(ls -1 ${DIR}); do
             # TODO: check media suitable
             NEXTMEDIA="${MEDIA}"
             NEXTSESSION="$(date -u +%s)"

@@ -60,6 +60,9 @@ echo "AUDIO_CHANNELS=\"${AUDIO_CHANNELS}\"" >> /tmp/livebox.env
 AUDIO_BITRATE="${AUDIO_BITRATE:-96k}"
 echo "AUDIO_BITRATE=\"${AUDIO_BITRATE}\"" >> /tmp/livebox.env
 
+EXTRA_OPTIONS="${EXTRA_OPTIONS:-}"
+echo "EXTRA_OPTIONS=\"${EXTRA_OPTIONS}\"" >> /tmp/livebox.env
+
 echo "All variables:"
 cat /tmp/livebox.env
 echo

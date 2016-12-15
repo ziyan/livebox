@@ -59,7 +59,7 @@ done
 TEE=""
 V="0"
 for SUBSTREAM in ${SUBSTREAMS}; do
-    TEE="${TEE}|[select=\'v\:${V},a\':hls_time=${HLS_TIME}:hls_list_size=$(expr 3 * ${HLS_LIST_SIZE}):use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}.${SUBSTREAM}.%s.ts]${SUBSTREAM}.m3u8"
+    TEE="${TEE}|[select=\'v\:${V},a\':hls_time=${HLS_TIME}:hls_list_size=$(expr 3 \* ${HLS_LIST_SIZE}):use_localtime=1:hls_flags=66:hls_segment_filename=${SESSION}.${SUBSTREAM}.%s.ts]${SUBSTREAM}.m3u8"
     V="$(expr 1 + ${V})"
 done
 TEE="${TEE#|}"
@@ -68,6 +68,7 @@ TEE="${TEE#|}"
 echo /bin/ffmpeg \
     -i "rtmp://127.0.0.1/${APP}/${STREAM}" ${OUTPUTS} \
     -c:v libx264 -vprofile ${VIDEO_PROFILE} -vlevel ${VIDEO_LEVEL} -c:a aac -ar ${AUDIO_SAMPLING_RATE} -ac ${AUDIO_CHANNELS} -b:a ${AUDIO_BITRATE} \
+    ${EXTRA_OPTIONS} \
     -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})" \
     -filter_complex "${FILTER}" \
     ${MAPS} -f tee "${TEE}"
@@ -75,6 +76,7 @@ echo /bin/ffmpeg \
 exec /bin/ffmpeg \
     -i "rtmp://127.0.0.1/${APP}/${STREAM}" ${OUTPUTS} \
     -c:v libx264 -vprofile ${VIDEO_PROFILE} -vlevel ${VIDEO_LEVEL} -c:a aac -ar ${AUDIO_SAMPLING_RATE} -ac ${AUDIO_CHANNELS} -b:a ${AUDIO_BITRATE} \
+    ${EXTRA_OPTIONS} \
     -force_key_frames "expr:gte(t,n_forced*${HLS_TIME})" \
     -filter_complex "${FILTER}" \
     ${MAPS} -f tee "${TEE}"
