@@ -24,10 +24,10 @@ nginx/objs/nginx:
 	$(MAKE) -C nginx
 
 build/bin/ffmpeg: ffmpeg-release-64bit-static.tar.xz
-	mkdir -p build/bin && tar xvpf ffmpeg-release-64bit-static.tar.xz -C build/bin --strip 1 ffmpeg-3.2.1-64bit-static/ffmpeg && touch build/bin/ffmpeg
+	mkdir -p build/bin && tar xvpf ffmpeg-release-64bit-static.tar.xz -C build/bin --strip 1 --wildcards ffmpeg-*-64bit-static/ffmpeg && touch build/bin/ffmpeg
 
 ffmpeg-release-64bit-static.tar.xz:
-	wget "${STATIC_FFMPEG_URL}" -O $@
+	wget ${STATIC_FFMPEG_URL} -O $@
 
 build/etc/nginx.conf: nginx.conf
 	mkdir -p build/etc && cp nginx.conf build/etc/nginx.conf
